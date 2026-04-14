@@ -1,0 +1,12 @@
+Updated App.jsx to support break-time selection and deduction for daily log entries.
+
+Changes made:
+- Added a new "Break Time" dropdown with options 0:00, 30 mins, and 1 hr.
+- Adjusted hour calculation to subtract selected break minutes from the total rendered time.
+- Included breakMinutes in saved Firebase entries.
+- Updated preview hours next to Time Out to reflect the adjusted total.
+- Added a "Break" column in the daily log table so saved entries show the selected break duration.
+- Reset break selection when switching to Absent status and after adding an entry.
+
+File changed:
+- src/App.jsx
