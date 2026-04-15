@@ -1,0 +1,40 @@
+type User @table {
+  displayName: String!
+  email: String!
+  role: String!
+  createdAt: Timestamp!
+  photoUrl: String
+}
+
+type Program @table {
+  name: String!
+  requiredHours: Int!
+  createdAt: Timestamp!
+  description: String
+}
+
+type Student @table {
+  user: User!
+  program: Program!
+  supervisor: Supervisor!
+  createdAt: Timestamp!
+}
+
+type Supervisor @table {
+  user: User!
+  createdAt: Timestamp!
+  contactInfo: String
+}
+
+type OJTLog @table {
+  student: Student!
+  date: Date!
+  startTime: Timestamp!
+  endTime: Timestamp!
+  status: String!
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+  tasksPerformed: String
+  description: String
+  supervisorNotes: String
+}

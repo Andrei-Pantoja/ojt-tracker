@@ -42,6 +42,7 @@ export default function App() {
   const [timeIn, setTimeIn] = useState("");
   const [timeOut, setTimeOut] = useState("");
   const [breakMinutes, setBreakMinutes] = useState(0);
+  const [overtimeMinutes, setOvertimeMinutes] = useState(0);
   const [status, setStatus] = useState("present");
   const [remarks, setRemarks] = useState("");
   const [formError, setFormError] = useState("");
@@ -155,13 +156,6 @@ export default function App() {
     });
   }
 
-  const totalHours = entries.reduce((s, e) => s + (e.hours || 0), 0);
-  const daysPresent = entries.filter((e) => e.status === "present").length;
-  const daysAbsent = entries.filter((e) => e.status === "absent").length;
-  const reqHours = parseFloat(internReq) || 0;
-  const remaining = Math.max(0, reqHours - totalHours);
-  const progress = reqHours > 0 ? Math.min(100, (totalHours / reqHours) * 100) : 0;
-
   // ─── Preview hours as user types ──────────────────────────────────────────
   useEffect(() => {
     if (status === "present" && timeIn && timeOut) {
@@ -171,6 +165,55 @@ export default function App() {
       setPreviewHours(null);
     }
   }, [timeIn, timeOut, breakMinutes, status]);
+
+  function getWeekStart(dateString) {
+    const date = new Date(dateString + "T00:00:00");
+    const weekday = date.getDay();
+    const daysSinceMonday = (weekday + 6) % 7;
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - daysSinceMonday);
+    return monday.toISOString().slice(0, 10);
+  }
+
+  const entryGroupsByWeek = entries.reduce((groups, entry) => {
+    const weekStart = getWeekStart(entry.date);
+    if (!groups[weekStart]) groups[weekStart] = [];
+    groups[weekStart].push(entry);
+    return groups;
+  }, {});
+
+  const weekSummaries = Object.keys(entryGroupsByWeek)
+    .sort()
+    .map((weekStart, index) => {
+      const items = entryGroupsByWeek[weekStart];
+      const baseHours = items.reduce((sum, item) => sum + (item.hours || 0), 0);
+      const overtimeHours = items.reduce((sum, item) => sum + ((item.overtimeMinutes || 0) / 60), 0);
+      return {
+        weekStart,
+        weekLabel: `Week ${index + 1} (${fmtDate(weekStart).replace(/, \d{4}$/, "")})`,
+        totalHours: baseHours + overtimeHours,
+        baseHours,
+        overtimeHours,
+        days: items.length,
+      };
+    });
+
+  const totalBaseHours = entries.reduce((s, e) => s + (e.hours || 0), 0);
+  const totalOvertimeHours = entries.reduce((s, e) => s + ((e.overtimeMinutes || 0) / 60), 0);
+  const totalHours = totalBaseHours + totalOvertimeHours;
+  const daysPresent = entries.filter((e) => e.status === "present").length;
+  const daysAbsent = entries.filter((e) => e.status === "absent").length;
+  const reqHours = parseFloat(internReq) || 0;
+  const remaining = Math.max(0, reqHours - totalHours);
+  const progress = reqHours > 0 ? Math.min(100, (totalHours / reqHours) * 100) : 0;
+
+  const weekCount = weekSummaries.length;
+
+  function escapeCsv(value) {
+    const text = value == null ? "" : String(value);
+    const escaped = text.replace(/"/g, '""');
+    return `"${escaped}"`;
+  }
 
   // ─── Save intern info ──────────────────────────────────────────────────────
   async function saveInternInfo() {
@@ -214,6 +257,7 @@ export default function App() {
       timeIn: status === "absent" ? "" : timeIn,
       timeOut: status === "absent" ? "" : timeOut,
       breakMinutes: status === "absent" ? 0 : breakMinutes,
+      overtimeMinutes: status === "absent" ? 0 : overtimeMinutes,
       hours,
       status,
       remarks,
@@ -253,6 +297,7 @@ export default function App() {
       setTimeIn("");
       setTimeOut("");
       setBreakMinutes(0);
+      setOvertimeMinutes(0);
       setStatus("present");
       setRemarks("");
       setEditingEntryId(null);
@@ -271,6 +316,7 @@ export default function App() {
     setTimeIn(entry.timeIn || "");
     setTimeOut(entry.timeOut || "");
     setBreakMinutes(entry.breakMinutes || 0);
+    setOvertimeMinutes(entry.overtimeMinutes || 0);
     setRemarks(entry.remarks || "");
     setFormError("");
   }
@@ -324,7 +370,7 @@ export default function App() {
           <div className="header-brand">
             <div className="brand-icon">OJT</div>
             <div>
-              <h1>Internship Hour Tracker for CDSGA</h1>
+              <h1>OJT Hour Tracker</h1>
               <p className="header-sub">On-the-Job Training Daily Log by Andrei D. Pantoja</p>
             </div>
           </div>
@@ -353,6 +399,34 @@ export default function App() {
           <div><span>Required Hours:</span> {reqHours || "—"}</div>
           <div><span>Total Rendered:</span> {totalHours.toFixed(2)} hrs</div>
           <div><span>Remaining:</span> {remaining.toFixed(2)} hrs</div>
+          <div><span>Weeks:</span> {weekCount}</div>
+        </div>
+        <div className="print-meta-area">
+          <div className="print-week-grid">
+            {weekSummaries.map((week) => (
+              <div key={week.weekStart} className="week-card">
+                <div className="week-row"><strong>{week.weekLabel}</strong></div>
+                <div className="week-row">Days: {week.days}</div>
+                <div className="week-row">Base: {week.baseHours.toFixed(2)} hrs</div>
+                <div className="week-row">OT: {week.overtimeHours.toFixed(2)} hrs</div>
+                <div className="week-row"><strong>Total: {week.totalHours.toFixed(2)} hrs</strong></div>
+              </div>
+            ))}
+          </div>
+          <div className="print-signature-box">
+            <div>
+              <div className="signature-line" />
+              <div>Supervisor / Mentor Signature</div>
+            </div>
+            <div>
+              <div className="signature-line" />
+              <div>Intern Signature</div>
+            </div>
+            <div>
+              <div className="signature-line" />
+              <div>Date</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -464,6 +538,18 @@ export default function App() {
                 <option value={60}>1 hr</option>
               </select>
             </div>
+            <div className="field">
+              <label>Overtime</label>
+              <select value={overtimeMinutes} disabled={status === "absent"} onChange={(e) => setOvertimeMinutes(Number(e.target.value))}>
+                <option value={0}>0:00</option>
+                <option value={15}>15 mins</option>
+                <option value={30}>30 mins</option>
+                <option value={45}>45 mins</option>
+                <option value={60}>1 hr</option>
+                <option value={90}>1 hr 30 mins</option>
+                <option value={120}>2 hrs</option>
+              </select>
+            </div>
             <div className="field field-wide">
               <label>Remarks (optional)</label>
               <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. Field work, holiday, etc." />
@@ -517,41 +603,48 @@ export default function App() {
                     <th>Time In</th>
                     <th>Time Out</th>
                     <th>Break</th>
-                    <th>Hours</th>
+                    <th>Overtime</th>
+                    <th>Total</th>
                     <th>Status</th>
                     <th>Remarks</th>
                     <th className="no-print">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((e, i) => (
-                    <tr key={e.id} className={e.status === "absent" ? "row-absent" : ""}>
-                      <td className="td-num">{i + 1}</td>
-                      <td>{fmtDate(e.date)}</td>
-                      <td>{e.status === "absent" ? "—" : fmtTime(e.timeIn)}</td>
-                      <td>{e.status === "absent" ? "—" : fmtTime(e.timeOut)}</td>
-                      <td>{e.status === "absent" ? "—" : e.breakMinutes === 60 ? "1 hr" : e.breakMinutes === 30 ? "30 mins" : "0:00"}</td>
-                      <td className="td-hours">{e.status === "absent" ? "—" : `${e.hours} hrs`}</td>
-                      <td>
-                        <span className={`badge ${e.status === "absent" ? "badge-absent" : "badge-present"}`}>
-                          {e.status === "absent" ? "Absent" : "Present"}
-                        </span>
-                      </td>
-                      <td className="td-remarks">{e.remarks || "—"}</td>
-                      <td className="no-print">
-                        <button className="btn btn-primary" type="button" onClick={() => editEntry(e)}>
-                          Edit
-                        </button>
-                        <button className="btn-del" type="button" onClick={() => deleteEntry(e)}>
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {entries.map((e, i) => {
+                    const entryOvertime = (e.overtimeMinutes || 0) / 60;
+                    const entryTotal = (e.hours || 0) + entryOvertime;
+                    return (
+                      <tr key={e.id} className={e.status === "absent" ? "row-absent" : ""}>
+                        <td className="td-num">{i + 1}</td>
+                        <td>{fmtDate(e.date)}</td>
+                        <td>{e.status === "absent" ? "—" : fmtTime(e.timeIn)}</td>
+                        <td>{e.status === "absent" ? "—" : fmtTime(e.timeOut)}</td>
+                        <td>{e.status === "absent" ? "—" : e.breakMinutes === 60 ? "1 hr" : e.breakMinutes === 30 ? "30 mins" : "0:00"}</td>
+                        <td>{e.status === "absent" ? "—" : entryOvertime ? `${entryOvertime.toFixed(2)} hrs` : "0:00"}</td>
+                        <td className="td-hours">{e.status === "absent" ? "—" : `${entryTotal.toFixed(2)} hrs`}</td>
+                        <td>
+                          <span className={`badge ${e.status === "absent" ? "badge-absent" : "badge-present"}`}>
+                            {e.status === "absent" ? "Absent" : "Present"}
+                          </span>
+                        </td>
+                        <td className="td-remarks">{e.remarks || "—"}</td>
+                        <td className="no-print">
+                          <button className="btn btn-primary" type="button" onClick={() => editEntry(e)}>
+                            Edit
+                          </button>
+                          <button className="btn-del" type="button" onClick={() => deleteEntry(e)}>
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan="4" className="foot-label">Total</td>
+                    <td colSpan="5" className="foot-label">Total Rendered</td>
+                    <td className="foot-total">{totalOvertimeHours.toFixed(2)} hrs OT</td>
                     <td className="foot-total">{totalHours.toFixed(2)} hrs</td>
                     <td colSpan="3" className="foot-summary">
                       Present: {daysPresent} &nbsp;|&nbsp; Absent: {daysAbsent}
